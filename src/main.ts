@@ -5,17 +5,68 @@ import {
 	Modal,
 	Notice,
 	Plugin,
+	requestUrl,
 } from 'obsidian';
 import {
 	DEFAULT_SETTINGS,
-	MyPluginSettings,
-	SampleSettingTab,
+	CalibreServerSettings,
+	CalibreSettingTab,
 } from './settings';
 
 // Remember to rename these classes and interfaces!
 
+/* TODO:
+- check if folder exist ✅
+- create folder ✅
+
+- base calibre content server url
+- fetch data from url and hash it 
+
+- hashcheck
+- if hash differs, update data ✅
+- save hash for future check ✅
+
+- file exist? update. if not, create new markdown
+- cover differs? download cover
+- new file? create with template
+ */
+
+interface CalibreBook {
+	application_id: number
+	title: string
+	authors: string[]
+	tags: string[]
+	cover: string
+	formats: string[]
+	main_format: string[]
+	publisher: string
+	languages: string[]
+	uuid: string
+	timestamp: string
+	last_modified: string
+	series_index: number
+	series: string
+	path: string
+}
+
+type BooksResponse = Record<string, CalibreBook>;
+
 export default class MyPlugin extends Plugin {
-	settings!: MyPluginSettings;
+	settings!: CalibreServerSettings;
+	mimeToExtension(contentType: string): string {
+		switch (contentType) {
+			case "image/jpeg":
+				return "jpg";
+			case "image/png":
+				return "png";
+			case "image/webp":
+				return "webp";
+			case "image/gif":
+				return "gif";
+			default:
+				return "bin";
+		}
+	}
 
 	async onload() {
 		// this.addCommand({
@@ -27,31 +78,105 @@ export default class MyPlugin extends Plugin {
 		// 	},
 		// });
 		this.addCommand({
-			id: "create-book-note",
-			name: "Create book note2",
-			callback: async () => {
-				const content = `---
-title: The Dispossessed
-author: Ursula K. Le Guin
+			id: "check-calibre-server",
+			name: "Check calibre server",
+			callback: async() => {
+				new Notice('Checking calibre');
+				try {
+					const url = this.settings.baseUrl
+					const readerUrl = this.settings.readerUrl
+					new Notice(`Calibre URL: ${url}`)
+					const response = await requestUrl(
+						`${url}/ajax/books`
+					);	
+					new Notice(String(response.status));
+					if (response.status == 200) {
+						
+						// await this.app.vault.create(
+						// 	"./Books/testresponse.md",
+						// 	JSON.stringify(response.json)
+						// );
+						let books = response.json as BooksResponse
+						for(const id in books){
+							const book = books[id]
+							if (Number(id) > 100 || Number(id) < 90) {
+								continue;
+							}
+							if (!book) continue;
+							// console.log(book.title);
+							const authors = book.authors.map(author => {
+								return `\n- "${author}"`
+							}).join("");
+							const tags = book.tags.map(tag => {
+								return `\n- "${tag}"`
+							}).join("");
+							const languages = book.tags.map(language => {
+								return `\n- "${language}"`
+							}).join("");
+							const cover = await requestUrl(
+								`${url}/${book.cover}`
+							);
+							const format = book.formats[0];
+
+							const regex = /[*"\\/<>:|?]/g;
+							const cleanedTitle = book.title.replaceAll(regex, "");
+							const mime = cover.headers["content-type"] ?? "";
+							const extension = this.mimeToExtension(mime);
+							const coverPath = `Books/Cover/${cleanedTitle}.${extension}`
+							const exists = this.app.vault.getAbstractFileByPath(coverPath);
+
+							if (!exists) {
+								// await this.app.vault.modifyBinary(
+								// 	exists as TFile,
+								// 	cover.arrayBuffer
+								// );
+								await this.app.vault.createBinary(
+									coverPath,
+									cover.arrayBuffer
+								);
+							}
+
+							const content = `---
+title: "${book.title}"
+authors: ${authors}
+tags: ${tags}
+cover: "${book.cover}"
+publisher: ${book.publisher}
+languages: ${languages}
+application_id:	${book.application_id}
+uuid: ${book.uuid}
+timestamp: ${book.timestamp}
+last_modified:	${book.last_modified}
+series_index: ${book.series_index}
+series: ${book.series}
+download_path: "${url}/get/${format}/${book.application_id}/books"
+read_path: "${readerUrl}/read/${book.application_id}/${format}"
+
+cover_path: "${coverPath}"
 ---
+![[${coverPath}|${this.settings.coverWidth}]]
 
-# The Dispossessed
-
+# ${book.title}
 ## Summary
-
 ## Notes
 `;
-
-				const folder = this.app.vault.getAbstractFileByPath("Books");
-				if (!folder) {
-					await this.app.vault.createFolder("Books");
+							
+							
+							// console.log(cleanedTitle);
+							// const cleanedAuthor = book.authors[0].replaceAll(regex, "");
+							const path = `Books/${cleanedTitle}.md`
+							const existing = this.app.vault.getAbstractFileByPath(path);
+							if (!existing) {
+								await this.app.vault.create(path,content);
+							}
+							
+						}
+					}
+				} catch (error) {
+					new Notice(String(error));
 				}
-				await this.app.vault.create(
-					"./Books/The Dispossessed.md",
-					content
-				);
 			}
-		});
+		})
 
 		await this.loadSettings();
 
@@ -107,7 +232,7 @@ author: Ursula K. Le Guin
 		});
 
 		// This adds a settings tab so the user can configure various aspects of the plugin
-		this.addSettingTab(new SampleSettingTab(this.app, this));
+		this.addSettingTab(new CalibreSettingTab(this.app, this));
 
 		// If the plugin hooks up any global DOM events (on parts of the app that doesn't belong to this plugin)
 		// Using this function will automatically remove the event listener when this plugin is disabled.
@@ -116,9 +241,9 @@ author: Ursula K. Le Guin
 		});
 
 		// When registering intervals, this function will automatically clear the interval when the plugin is disabled.
-		this.registerInterval(
-			window.setInterval(() => console.log('setInterval'), 1 * 1 * 1000),
-		);
+		// this.registerInterval(
+		// 	window.setInterval(() => console.log('setInterval'), 1 * 1 * 1000),
+		// );
 	}
 
 	onunload() {}
@@ -127,7 +252,7 @@ author: Ursula K. Le Guin
 		this.settings = Object.assign(
 			{},
 			DEFAULT_SETTINGS,
-			(await this.loadData()) as Partial<MyPluginSettings>,
+			(await this.loadData()) as Partial<CalibreServerSettings>,
 		);
 	}
 
