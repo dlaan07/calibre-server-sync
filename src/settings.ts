@@ -1,5 +1,5 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import MyPlugin from './main';
+import CalibreServerSync from './main';
 
 export interface CalibreServerSettings {
 	mySetting: string;
@@ -16,9 +16,9 @@ export const DEFAULT_SETTINGS: CalibreServerSettings = {
 };
 
 export class CalibreSettingTab extends PluginSettingTab {
-	plugin: MyPlugin;
+	plugin: CalibreServerSync;
 
-	constructor(app: App, plugin: MyPlugin) {
+	constructor(app: App, plugin: CalibreServerSync) {
 		super(app, plugin);
 		this.plugin = plugin;
 	}

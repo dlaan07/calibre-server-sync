@@ -51,7 +51,7 @@ interface CalibreBook {
 
 type BooksResponse = Record<string, CalibreBook>;
 
-export default class MyPlugin extends Plugin {
+export default class CalibreServerSync extends Plugin {
 	settings!: CalibreServerSettings;
 	mimeToExtension(contentType: string): string {
 		switch (contentType) {
