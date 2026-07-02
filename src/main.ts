@@ -48,11 +48,22 @@ interface CalibreBook {
 	series: string
 	path: string
 }
+interface PluginData {
+	lastLibrarySync?: string;
+	books: Record<number, CachedBook>;
+}
+
+interface CachedBook {
+	lastModified: string;
+	lastSynced: string;
+}
 
 type BooksResponse = Record<string, CalibreBook>;
 
 export default class CalibreServerSync extends Plugin {
 	settings!: CalibreServerSettings;
+	data!: PluginData;
+
 	mimeToExtension(contentType: string): string {
 		switch (contentType) {
 			case "image/jpeg":
@@ -69,6 +80,10 @@ export default class CalibreServerSync extends Plugin {
 	}
 
 	async onload() {
+		// this.data = await this.loadData() ?? {
+		// 	books: {}
+		// };
+		// console.log(this.data.books)
 		// this.addCommand({
 		// 	id: 'create-file',
 		// 	name: 'Create file',
@@ -91,6 +106,18 @@ export default class CalibreServerSync extends Plugin {
 					);	
 					new Notice(String(response.status));
 					if (response.status == 200) {
+
+						// const cached = this.data.books[book.id];
+
+						// if (!cached) {
+						// 	// First sync
+						// }
+						// else if (cached.lastModified !== book.last_modified) {
+						// 	// Remote changed
+						// }
+						// else {
+						// 	// Up-to-date
+						// }
 						
 						// await this.app.vault.create(
 						// 	"./Books/testresponse.md",
@@ -117,6 +144,12 @@ export default class CalibreServerSync extends Plugin {
 								`${url}/${book.cover}`
 							);
 							const format = book.formats[0];
+							this.data.books[book.application_id] = {
+								lastModified: book.last_modified,
+								lastSynced: new Date().toISOString()
+							};
+							console.log(this.data);
+							await this.saveData(this.data);
 
 							const regex = /[*"\\/<>:|?]/g;
 							const cleanedTitle = book.title.replaceAll(regex, "");
